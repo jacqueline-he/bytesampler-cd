@@ -36,23 +36,23 @@ generate_batched(
     display=True
 )
 
-# Test with different alpha/beta combinations
-print("\n" + "-"*30)
-print("Copyright decoding with alpha=0.8")
-print("-"*30)
-generate_batched(
-    BytewiseCopyrightDecodingFactory(tcs_draft=clean_bc, tcs_verify=dirty_bc, alpha=0.8),
-    prompts,
-    max_new_bytes=500,
-    display=True
-)
+# # Test with different alpha/beta combinations
+# print("\n" + "-"*30)
+# print("Copyright decoding with alpha=0.8")
+# print("-"*30)
+# generate_batched(
+#     BytewiseCopyrightDecodingFactory(tcs_draft=clean_bc, tcs_verify=dirty_bc, alpha=0.8),
+#     prompts,
+#     max_new_bytes=500,
+#     display=True
+# )
 
-print("\n" + "-"*30)
-print("Copyright decoding with alpha=1.2")
-print("-"*30)
-generate_batched(
-    BytewiseCopyrightDecodingFactory(tcs_draft=clean_bc, tcs_verify=dirty_bc, alpha=1.2),
-    prompts,
-    max_new_bytes=500,
-    display=True
-)
+# print("\n" + "-"*30)
+# print("Copyright decoding with alpha=1.2")
+# print("-"*30)
+# generate_batched(
+#     BytewiseCopyrightDecodingFactory(tcs_draft=clean_bc, tcs_verify=dirty_bc, alpha=1.2),
+#     prompts,
+#     max_new_bytes=500,
+#     display=True
+# )
