@@ -72,7 +72,7 @@ class ByteConditioning(object):
             self.tokenizer = tokenizer
         else:
             load_kwargs = (
-                dict(device_map="auto", torch_dtype=torch.bfloat16)
+                dict(torch_dtype=torch.bfloat16)
                 if load_kwargs is None
                 else load_kwargs
             )
