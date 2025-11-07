@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from .byte_conditioning import ByteConditioning
 from .utils import sample_from_logits, sample_from_prob_tree
+from .acpfuse_utils import solve_optimization, get_fused_logp_from_weights
 
 
 class EnsembleBytewiseSamplerFactory:
@@ -57,174 +58,43 @@ class BytewiseContrastiveDecodingFactory:
     def get_bytewise_sampler(self, batch_size):
         return BytewiseContrastiveDecoding(batch_size, *self.args, **self.kwargs)
 
-class BytewiseCopyrightDecodingFactory:
+class BytewiseKLAcpFuseFactory:
     def __init__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
 
     def get_bytewise_sampler(self, batch_size):
-        return BytewiseCopyrightDecoding(batch_size, *self.args, **self.kwargs)
+        return BytewiseKLAcpFuse(batch_size, *self.args, **self.kwargs)
 
-# class BytewiseCopyrightDecoding:
-#     """
-#     Speculative-contrastive byte sampler that is 100 % compatible with
-#     generate_batched(): each call to get_dists() produces logits for ONE
-#     next byte, while the class keeps its own internal queue of “already
-#     accepted” draft bytes.
-#     """
+class BytewiseKLAcpFuse:
+    def __init__(self, batch_size, tcs_clean, tcs_dirty, k_radius=1.0, **kwargs):
+        self.batch_size = batch_size
+        self.tcs_clean = tcs_clean
+        self.tcs_dirty = tcs_dirty
+        self.k_radius = k_radius
+        self.kwargs = kwargs
+        self.bs_clean = tcs_clean.get_bytewise_sampler(batch_size=batch_size)
+        self.bs_dirty = tcs_dirty.get_bytewise_sampler(batch_size=batch_size)
 
-#     def __init__(
-#         self,
-#         batch_size: int,
-#         tcs_draft,
-#         tcs_verify,
-#         *,
-#         gamma: int = 4,
-#         top_k_ver: int = 10,
-#         alpha: float = 1.0,
-#         temperature: float = 0.7,
-#         top_p: float = 0.9,
-#         **kwargs,
-#     ):
-#         self.B = batch_size
-#         self.gamma = gamma
-#         self.top_k_ver = top_k_ver
-#         self.alpha = alpha
-#         self.temp  = temperature
-#         self.top_p = top_p
+        self.bss = [self.bs_clean, self.bs_dirty]
+        self.kwargs = kwargs 
 
-#         # underlying bytewise samplers
-#         self.bs_draft  = tcs_draft .get_bytewise_sampler(batch_size)
-#         self.bs_verify = tcs_verify.get_bytewise_sampler(batch_size)
-
-#         # FIFO of bytes we have already “accepted” and must emit
-#         self._byte_queue: list[int] = []
-
-#         # cache a full-probability tensor for quick one-hots
-#         self._neg_inf = torch.finfo(torch.float32).min
-
-#     # ------------------------------------------------------------------
-#     # helper
-#     # ------------------------------------------------------------------
-#     def _one_hot_logits(self, token_id: int, device) -> torch.Tensor:
-#         """Return (B,257) logits that force-emit token_id."""
-#         logits = torch.full((self.B, 257), self._neg_inf, device=device)
-#         logits[:, token_id] = 0.0
-#         return logits
-
-#     def add_context(self, chunks: list[Union[str, bytes]]):
-#         self.bs_draft .add_context(chunks)
-#         self.bs_verify.add_context(chunks)
-
-
-#     # ------------------------------------------------------------------
-#     # main entry expected by generate_batched()
-#     # ------------------------------------------------------------------
-#     def get_dists(self) -> torch.Tensor:
-#         # 1️⃣ – If we already have queued bytes, force-emit the next one
-#         if self._byte_queue:
-#             tok = self._byte_queue.pop(0)
-#             return self._one_hot_logits(tok, device=self.bs_draft.get_dists().device)
-
-#         # 2️⃣ – Otherwise run a *new* speculative cycle
-#         draft_tokens, draft_logits = [], []
-#         for _ in range(self.gamma):
-#             logits_d = self.bs_draft.get_dists()  # (B,257)
-#             if self.temp > 0:
-#                 logits_d = logits_d / self.temp
-
-#             next_tok = torch.multinomial(
-#                 torch.softmax(logits_d, dim=-1), num_samples=1
-#             )  # (B,1)
-
-#             draft_tokens.append(next_tok)
-#             draft_logits.append(logits_d)
-#             # feed to draft sampler so it advances context
-#             self.bs_draft.add_context([bytes([t.item()]) for t in next_tok])
-
-#         # verifier pass over the γ drafted bytes
-#         accept = 0
-#         for i, tok in enumerate(draft_tokens):
-#             logits_v = self.bs_verify.get_dists()  # ctx already advanced by prior accepts
-#             # rank of tok under verifier distribution
-#             rank = torch.argsort(logits_v, dim=-1, descending=True).eq(tok)
-#             if rank.any() and rank.nonzero(as_tuple=True)[1][0] < self.top_k_ver:
-#                 accept += 1
-#                 self.bs_verify.add_context([bytes([tok.item()])])
-#             else:
-#                 break
-
-#         # 3️⃣ – commit accepted bytes to queue & samplers
-#         if accept:
-#             for t in draft_tokens[:accept]:
-#                 t_byte = t.item()
-#                 self._byte_queue.append(t_byte)
-#                 # verifier context already updated above
-#         # 4️⃣ – fallback on first reject
-#         if accept < self.gamma:
-#             logits_a = draft_logits[accept]          # (B,257)
-#             logits_e = self.bs_verify.get_dists()    # (B,257)
-
-#             # ---- agreement-based fusion -------------------------------
-#             # convert to log-probs
-#             log_p_a = F.log_softmax(logits_a, dim=-1)
-#             log_p_e = F.log_softmax(logits_e, dim=-1)
-
-#             # agreement term: higher when the two log-probs are close
-#             agreement = -(log_p_a - log_p_e).abs()   # (B,257)
-
-#             # α = self.alpha controls how much we reward agreement
-#             fused_logp = (log_p_a + log_p_e) / 2 + self.alpha * agreement
-#             fused_logp = F.log_softmax(fused_logp, dim=-1)  # (B,257)
-
-#             return fused_logp        # shape already (B,257)
-
-#         # 5️⃣ – finally, emit the *first* accepted byte now
-#         tok = self._byte_queue.pop(0)
-#         return self._one_hot_logits(tok, device=logits_d.device)  
-
-class BytewiseCopyrightDecoding:
-
-    def __init__(
-        self,
-        batch_size: int,
-        tcs_draft,
-        tcs_verify,
-        *,
-        gamma: int = 4,
-        top_k_ver: int = 10,
-        alpha: float = 1.0,
-        temperature: float = 0.7,
-        top_p: float = 0.9,
-        **kwargs,
-    ):
-        self.B = batch_size
-        self.gamma = gamma
-        self.top_k_ver = top_k_ver
-        self.alpha = alpha
-        self.temp  = temperature
-        self.top_p = top_p
-
-        # underlying bytewise samplers
-        self.bs_draft  = tcs_draft .get_bytewise_sampler(batch_size)
-        self.bs_verify = tcs_verify.get_bytewise_sampler(batch_size)
+    def get_dists(self, **kwargs):
+        logits = torch.stack([bs.get_dists(**kwargs) for bs in self.bss], 0).moveaxis(
+            1, 0
+        )
+        clean_logits, dirty_logits = logits[:, 0, :], logits[:, 1, :] # 1, 257 (byte-level)
+        # why are clean_logits, dirty_logits sometimes -inf? is this to mask out invalid continuations to the prefix? 
+        bc, bd = solve_optimization(clean_logits, dirty_logits, self.k_radius)
+        print(f" [DEBUG] bc: {bc}, bd: {bd}")
+        fused_log_probs, _, fused_next_token_logits = get_fused_logp_from_weights(bc, bd, clean_logits, dirty_logits)
+        return fused_log_probs
 
     def add_context(self, prompts: list[Union[str, bytes]]):
-        self.bs_draft.add_context(prompts)
-        self.bs_verify.add_context(prompts)
+        for bs in self.bss:
+            bs.add_context(prompts)
 
 
-    # ------------------------------------------------------------------
-    # main entry expected by generate_batched()
-    # ------------------------------------------------------------------
-    def get_dists(self) -> torch.Tensor:
-        logits_draft = self.bs_draft.get_dists()
-        logits_verify = self.bs_verify.get_dists()
-        logprobs_draft = F.log_softmax(logits_draft, -1)
-        logprobs_verify = F.log_softmax(logits_verify, -1)
-        agreement = -(logprobs_draft - logprobs_verify).abs()
-        fused = (logprobs_draft + logprobs_verify) / 2 + self.alpha * agreement
-        return F.log_softmax(fused, -1)
 
 class BytewiseContrastiveDecoding:
     def __init__(
