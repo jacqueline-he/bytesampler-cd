@@ -13,7 +13,7 @@ dirty_bc = ByteConditioning(dirty_bc_dir)
 # sample a continuation with a QA formatted prompt.
 prompts = ["Mr. and Mrs. Dursley, of number four, Privet Drive, were proud to say that they were perfectly normal, thank you very much. "]
 generate_batched(
-    BytewiseKLAcpFuseFactory(tcs_clean=clean_bc, tcs_dirty=dirty_bc, k_radius=1.0),
+    BytewiseKLAcpFuseFactory(tcs_clean=clean_bc, tcs_dirty=dirty_bc, k_radius=0.3),
     prompts,
     temperature=0.5,
     max_new_bytes=50,
