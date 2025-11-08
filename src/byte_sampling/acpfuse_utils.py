@@ -71,8 +71,6 @@ def solve_optimization_batched(p, q, k_max, rounds=4, eps=1e-5):
     w_d = 1 - lam
     return w_c, w_d, pq
 
-=======
->>>>>>> 36ae569 (add kl acp fuse)
 def safe_kl_pd_pc(log_pd: torch.Tensor, log_pc: torch.Tensor) -> torch.Tensor:
     """
     Compute KL(p_d || p_c) from log probs in a numerically safe way.
@@ -236,28 +234,3 @@ def get_fused_logp_from_weights(
 
     next_token_logits = bc.unsqueeze(-1) * clean_logits + bd.unsqueeze(-1) * dirty_logits
     return log_p, log_pc, next_token_logits
-
-# def get_fused_logp_from_weights(
-#     bc: torch.Tensor,  # [B,1] or [B]
-#     bd: torch.Tensor,  # [B,1] or [B]
-#     clean_logits: torch.Tensor, # [B,V]
-#     dirty_logits: torch.Tensor, # [B,V]
-# ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-
-#     # Convert logits to logprobs
-#     log_pc = F.log_softmax(clean_logits, dim=-1)  # [B,V]
-#     log_pd = F.log_softmax(dirty_logits, dim=-1)  # [B,V]
-
-#     # 3) Geometric blend in log-prob space, then renormalize
-#     if bc.dim() == 2 and bc.size(1) == 1: bc = bc.squeeze(1)
-#     if bd.dim() == 2 and bd.size(1) == 1: bd = bd.squeeze(1)
-
-#     # Compute un-normalized log distribution 
-#     unnormalized_log_p = bd.unsqueeze(-1) * log_pd + bc.unsqueeze(-1) * log_pc   # [B,V]
-
-#     # Normalize to a proper log prob distribution
-#     log_p = unnormalized_log_p - torch.logsumexp(unnormalized_log_p, dim=-1, keepdim=True)    # [B,V]
-
-#     next_token_logits = bc.unsqueeze(-1) * clean_logits + bd.unsqueeze(-1) * dirty_logits
-
-#     return log_p, log_pc, next_token_logits

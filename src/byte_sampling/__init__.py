@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from .byte_conditioning import ByteConditioning
 from .acpfuse_utils import solve_optimization, interpolate
 from .utils import sample_from_logits, sample_from_prob_tree
-from .acpfuse_utils import solve_optimization, get_fused_logp_from_weights
+from .acpfuse_utils import solve_optimization_batched, interpolate
 
 
 class EnsembleBytewiseSamplerFactory:
@@ -97,7 +97,6 @@ class BytewiseKLAcpFuse:
 
         # clean_logits, dirty_logits sometimes -inf to mask out invalid continuations to the prefix? 
         bc, bd = solve_optimization(clean_logits, dirty_logits, self.k_radius)
-
         fused_log_probs = interpolate(clean_logits, dirty_logits, bc)
         return fused_log_probs
 
@@ -151,8 +150,6 @@ class BytewiseCPFuse:
     def add_context(self, prompts: list[Union[str, bytes]]):
         for bs in self.bss:
             bs.add_context(prompts)
-=======
->>>>>>> 36ae569 (add kl acp fuse)
 
 class BytewiseContrastiveDecoding:
     def __init__(
