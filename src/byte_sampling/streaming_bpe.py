@@ -1,4 +1,4 @@
-from copy import copy
+from copy import copy, deepcopy
 from dataclasses import dataclass
 from typing import Optional, Self
 
@@ -146,7 +146,7 @@ class StreamingBPE:
         return new
 
     @classmethod
-    def tree_update(cls, tree1, tree2):
+    def tree_update(cls, tree1, tree2, copy=False):
         "Merge tree2 into tree1. Mutates tree1."
         merged = tree1
         for tid, subtree in tree2.items():
@@ -155,9 +155,9 @@ class StreamingBPE:
                     # pure torch to avoid a device sync
                     merged[tid] = torch.cat((merged[tid], subtree)).unique()
                 else:
-                    merged[tid] = cls.tree_update(merged[tid], subtree)
+                    merged[tid] = cls.tree_update(merged[tid], subtree, copy=copy)
             else:
-                merged[tid] = subtree
+                merged[tid] = deepcopy(subtree) if copy else subtree
 
         return merged
 
