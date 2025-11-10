@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from .byte_conditioning import ByteConditioning
 from .acpfuse_utils import solve_optimization, interpolate
 from .utils import sample_from_logits, sample_from_prob_tree
-from .acpfuse_utils import solve_optimization_batched, interpolate
+from .acpfuse_utils import solve_optimization, get_fused_logp_from_weights, solve_optimization_batched, interpolate
 
 
 class EnsembleBytewiseSamplerFactory:
@@ -76,6 +76,8 @@ class BytewiseKLAcpFuse:
         self.kwargs = kwargs
         self.bs_clean = tcs_clean.get_bytewise_sampler(batch_size=batch_size)
         self.bs_dirty = tcs_dirty.get_bytewise_sampler(batch_size=batch_size)
+        print(self.tcs_clean.model.device)
+        print(self.tcs_dirty.model.device)
 
         self.bss = [self.bs_clean, self.bs_dirty]
         self.kwargs = kwargs 
@@ -99,6 +101,7 @@ class BytewiseKLAcpFuse:
         bc, bd = solve_optimization(clean_logits, dirty_logits, self.k_radius)
         fused_log_probs = interpolate(clean_logits, dirty_logits, bc)
         return fused_log_probs
+        
 
     def add_context(self, prompts: list[Union[str, bytes]]):
         for bs in self.bss:
@@ -339,6 +342,7 @@ class BytewiseProxyTuning:
         return torch.log_softmax(
             logprobs[:, 0, :] + (logprobs[:, 1, :] - logprobs[:, 2, :]) * self.alpha, 1
         )
+
 
 @torch.inference_mode()
 def generate_batched(
