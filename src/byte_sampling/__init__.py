@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from .byte_conditioning import ByteConditioning
 from .utils import sample_from_logits
-from .acpfuse_utils import solve_optimization_batched, interpolate
+from .acpfuse_utils import solve_optimization, get_fused_logp_from_weights, solve_optimization_batched, interpolate
 
 
 class EnsembleBytewiseSamplerFactory:
@@ -75,6 +75,8 @@ class BytewiseKLAcpFuse:
         self.kwargs = kwargs
         self.bs_clean = tcs_clean.get_bytewise_sampler(batch_size=batch_size)
         self.bs_dirty = tcs_dirty.get_bytewise_sampler(batch_size=batch_size)
+        print(self.tcs_clean.model.device)
+        print(self.tcs_dirty.model.device)
 
         self.bss = [self.bs_clean, self.bs_dirty]
         self.kwargs = kwargs 
@@ -84,14 +86,11 @@ class BytewiseKLAcpFuse:
             1, 0
         )
         clean_logits, dirty_logits = logits[:, 0, :], logits[:, 1, :] # 1, 257 (byte-level)
-        # why are clean_logits, dirty_logits sometimes -inf? is this to mask out invalid continuations to the prefix? 
-        # bc, bd = solve_optimization(clean_logits, dirty_logits, self.k_radius)
-        # print(f" [DEBUG] bc: {bc}, bd: {bd}")
-        # fused_log_probs, _, fused_next_token_logits = get_fused_logp_from_weights(bc, bd, clean_logits, dirty_logits)
-        # return fused_log_probs
-        bc = solve_optimization_batched(clean_logits, dirty_logits, self.k_radius)
+        # clean_logits, dirty_logits sometimes -inf to mask out invalid continuations to the prefix? 
+        bc, _, _ = solve_optimization_batched(clean_logits, dirty_logits, self.k_radius)
         fused_log_probs = interpolate(clean_logits, dirty_logits, bc)
         return fused_log_probs
+        
 
     def add_context(self, prompts: list[Union[str, bytes]]):
         for bs in self.bss:
@@ -288,7 +287,6 @@ class BytewiseProxyTuning:
         )
 
 
-@torch.inference_mode()
 def generate_batched(
     sampler_factory,
     prompts: list[str],
