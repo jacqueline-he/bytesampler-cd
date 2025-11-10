@@ -82,10 +82,18 @@ class BytewiseKLAcpFuse:
         self.kwargs = kwargs 
 
     def get_dists(self, **kwargs):
-        logits = torch.stack([bs.get_dists(**kwargs) for bs in self.bss], 0).moveaxis(
-            1, 0
-        )
-        clean_logits, dirty_logits = logits[:, 0, :], logits[:, 1, :] # 1, 257 (byte-level)
+        # logits = torch.stack([bs.get_dists(**kwargs) for bs in self.bss], 0).moveaxis(
+        #     1, 0
+        # )
+        # clean_logits, dirty_logits = logits[:, 0, :], logits[:, 1, :] # 1, 257 (byte-level)
+
+        clean_logits = self.bs_clean.get_dists(**kwargs)
+        dirty_logits = self.bs_dirty.get_dists(**kwargs)
+
+        # Define a fused device 
+        fuse_device = dirty_logits.device 
+        clean_logits = clean_logits.to(fuse_device)
+        dirty_logits = dirty_logits.to(fuse_device)
         # clean_logits, dirty_logits sometimes -inf to mask out invalid continuations to the prefix? 
         bc, _, _ = solve_optimization_batched(clean_logits, dirty_logits, self.k_radius)
         fused_log_probs = interpolate(clean_logits, dirty_logits, bc)
