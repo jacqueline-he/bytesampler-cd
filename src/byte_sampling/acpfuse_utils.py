@@ -11,7 +11,10 @@ def kl(p: torch.Tensor, q: torch.Tensor):
     ).sum(-1)
 
 def interpolate(p: torch.Tensor, q: torch.Tensor, lam: torch.Tensor):
-    lam = lam.unsqueeze(-1)
+    if lam.dim() == 1:
+        lam = lam.unsqueeze(-1)       # [B, 1]
+    elif lam.dim() == 2 and lam.size(1) != 1:
+        raise ValueError(f"lam should be [B, 1], got {lam.shape}")
     mask = torch.isneginf(p) | torch.isneginf(q)
     # Stop the zero gradient from torch.where from hitting -inf
     p_safe, q_safe = torch.where(mask, 0, p), torch.where(mask, 0, q)
@@ -101,6 +104,7 @@ def solve_optimization(
         """
         bc, bd = find_lambda(clean_logits, dirty_logits, k_radius)
         assert (abs(bc + bd - 1.0) < 1e-6).all(), "Weights must sum to 1"
+        # bc is shape [B, 1], bd is shape [B, 1]
         return bc, bd
 
 def find_lambda(
