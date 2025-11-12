@@ -210,7 +210,6 @@ def sample_from_logits(
         top_p=top_p,
         filter_value=filter_value,
     )
-
     return torch.multinomial(torch.softmax(logprobs, dim=-1), 1, generator=generator)[..., 0]
 
 

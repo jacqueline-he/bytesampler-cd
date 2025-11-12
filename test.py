@@ -22,14 +22,14 @@ t0 = time.perf_counter()
 
 #### 7b / 8b ####
 # clean_model_path = "common-pile/comma-v0.1-2t"
-# dirty_model_path = "meta-llama/Llama-3.1-8B"
+# dirty_model_path = "meta-llama/Llama-3.1-8B"val
 
 # clean_model = AutoModelForCausalLM.from_pretrained(clean_model_path,torch_dtype=torch.bfloat16).to("cuda:0")
 # dirty_model = AutoModelForCausalLM.from_pretrained(dirty_model_path,torch_dtype=torch.bfloat16).to("cuda:0")
 
 #### 7b / 70b ####
-clean_model_path = "common-pile/comma-v0.1-2t"
-dirty_model_path = "meta-llama/Llama-3.1-70B"
+clean_model_path =  "jacquelinehe/comma-1.7b-v5" #"common-pile/comma-v0.1-2t"
+dirty_model_path = "meta-llama/Meta-Llama-3.1-8B"
 
 
 # bnb_config = BitsAndBytesConfig(
@@ -50,8 +50,6 @@ bnb_config = BitsAndBytesConfig(
 
 clean_model = AutoModelForCausalLM.from_pretrained(clean_model_path,torch_dtype=torch.bfloat16).to("cuda:0")
 dirty_model = AutoModelForCausalLM.from_pretrained(dirty_model_path,torch_dtype=torch.bfloat16, quantization_config=bnb_config, low_cpu_mem_usage=True, device_map="cuda:0")
-
-
 
 # clean_model = AutoModelForCausalLM.from_pretrained(clean_model_path,torch_dtype=torch.bfloat16,quantization_config=bnb_config, device_map={"":0})
 # dirty_model = AutoModelForCausalLM.from_pretrained(dirty_model_path,torch_dtype=torch.bfloat16,quantization_config=bnb_config, device_map={"":1})
@@ -75,8 +73,8 @@ log_gpu_stats(0, "before generation")
 log_gpu_stats(1, "before generation")
 
 # sample a continuation with a QA formatted prompt.
-prompts = ["You will be shown a series of passages from famous literary works. After these examples, you will receive a prefix from another passage and be asked to complete it based on the text of a famous work. Provide only the continuation for the last given prefix without any extra commentary, formatting, or additional text.\n\n\n\n\n\nComplete the prefix:\nyour belt, those are ours too. You have nothing to give us but your lives. How would you like to die, Tyrion son of Tywin?\" \"In my own bed, with a belly full of wine and a maiden's mouth around my cock, at the age of eighty,\" he replied. The huge one, Shagga, laughed first and loudest. The others seemed less amused. \"Conn, take their horses,\" Gunthor commanded. \"Kill the other and seize the halfinan. He can milk the goats and make the mothers laugh.\" Bronn sprang to his feet. \"Who dies first?\" \"No!\" Tyrion said sharply. \"Gunthor son of Gurn, hear me. My House is rich and powerful. If the Stone Crows will see us safely through these mountains, my lord father will shower you with gold.\" \"The gold of a lowland lord is as worthless as a halfman's promises,\" Gunthor said. \"Half a man I may be,\" Tyrion said"]
-#prompts = ["hello, how are you doing?"]
+#prompts = ["You will be shown a series of passages from famous literary works. After these examples, you will receive a prefix from another passage and be asked to complete it based on the text of a famous work. Provide only the continuation for the last given prefix without any extra commentary, formatting, or additional text.\n\n\n\n\n\nComplete the prefix:\nyour belt, those are ours too. You have nothing to give us but your lives. How would you like to die, Tyrion son of Tywin?\" \"In my own bed, with a belly full of wine and a maiden's mouth around my cock, at the age of eighty,\" he replied. The huge one, Shagga, laughed first and loudest. The others seemed less amused. \"Conn, take their horses,\" Gunthor commanded. \"Kill the other and seize the halfinan. He can milk the goats and make the mothers laugh.\" Bronn sprang to his feet. \"Who dies first?\" \"No!\" Tyrion said sharply. \"Gunthor son of Gurn, hear me. My House is rich and powerful. If the Stone Crows will see us safely through these mountains, my lord father will shower you with gold.\" \"The gold of a lowland lord is as worthless as a halfman's promises,\" Gunthor said. \"Half a man I may be,\" Tyrion said"]
+prompts = ["hello, how are you doing?", "goodbye, have a nice day!"]
 outputs = generate_batched(
     BytewiseKLAcpFuseFactory(tcs_clean=clean_bc, tcs_dirty=dirty_bc, k_radius=0.1),
     prompts,

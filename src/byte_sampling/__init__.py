@@ -6,8 +6,7 @@ import torch.nn.functional as F
 
 from .byte_conditioning import ByteConditioning
 from .utils import sample_from_logits
-from .acpfuse_utils import solve_optimization, get_fused_logp_from_weights, solve_optimization_batched, interpolate
-
+from .acpfuse_utils import solve_optimization, interpolate
 
 class EnsembleBytewiseSamplerFactory:
     def __init__(self, *args, **kwargs):
@@ -89,15 +88,24 @@ class BytewiseKLAcpFuse:
 
         clean_logits = self.bs_clean.get_dists(**kwargs)
         dirty_logits = self.bs_dirty.get_dists(**kwargs)
+        print(dirty_logits.shape)
+        if clean_logits.dim() == 3:
+            clean_logits = clean_logits[:, -1, :]   # [B, V]
+            dirty_logits = dirty_logits[:, -1, :]   # [B, V]
+        elif clean_logits.dim() != 2:
+            raise ValueError(f"Unsupported logits shape: {clean_logits.shape}")
 
         # Define a fused device 
         fuse_device = dirty_logits.device 
         clean_logits = clean_logits.to(fuse_device)
         dirty_logits = dirty_logits.to(fuse_device)
+        print(dirty_logits.shape)
         # clean_logits, dirty_logits sometimes -inf to mask out invalid continuations to the prefix? 
-        # bc, _, _ = solve_optimization_batched(clean_logits, dirty_logits, self.k_radius)
         bc, bd = solve_optimization(clean_logits, dirty_logits, self.k_radius)
+        print(bc.shape)
+        print(bd.shape)
         fused_log_probs = interpolate(clean_logits, dirty_logits, bc)
+        print(fused_log_probs.shape)
         return fused_log_probs
         
 
@@ -105,7 +113,52 @@ class BytewiseKLAcpFuse:
         for bs in self.bss:
             bs.add_context(prompts)
 
+class BytewiseCPFuseFactory:
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
 
+    def get_bytewise_sampler(self, batch_size):
+        return BytewiseCPFuse(batch_size, *self.args, **self.kwargs)
+
+class BytewiseCPFuse:
+    def __init__(self, batch_size, tcs_clean, tcs_dirty, **kwargs):
+        self.batch_size = batch_size
+        self.tcs_clean = tcs_clean
+        self.tcs_dirty = tcs_dirty
+        self.kwargs = kwargs
+        self.bs_clean = tcs_clean.get_bytewise_sampler(batch_size=batch_size)
+        self.bs_dirty = tcs_dirty.get_bytewise_sampler(batch_size=batch_size)
+        self.grid_size = 10
+        print(self.tcs_clean.model.device)
+        print(self.tcs_dirty.model.device)
+
+        self.bss = [self.bs_clean, self.bs_dirty]
+        self.kwargs = kwargs 
+
+    def get_dists(self, **kwargs):
+        # logits = torch.stack([bs.get_dists(**kwargs) for bs in self.bss], 0).moveaxis(
+        #     1, 0
+        # )
+        # clean_logits, dirty_logits = logits[:, 0, :], logits[:, 1, :] # 1, 257 (byte-level)
+
+        clean_logits = self.bs_clean.get_dists(**kwargs)
+        dirty_logits = self.bs_dirty.get_dists(**kwargs)
+
+        # Define a fused device 
+        fuse_device = dirty_logits.device 
+        clean_logits = clean_logits.to(fuse_device)
+        dirty_logits = dirty_logits.to(fuse_device)
+        # clean_logits, dirty_logits sometimes -inf to mask out invalid continuations to the prefix? 
+        # bc, _, _ = solve_optimization_batched(clean_logits, dirty_logits, self.k_radius)
+        bc, bd = cp_solve_optimization(clean_logits, dirty_logits)
+        fused_log_probs = interpolate(clean_logits, dirty_logits, bc)
+        return fused_log_probs
+        
+
+    def add_context(self, prompts: list[Union[str, bytes]]):
+        for bs in self.bss:
+            bs.add_context(prompts)
 
 class BytewiseContrastiveDecoding:
     def __init__(
