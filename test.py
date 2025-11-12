@@ -20,21 +20,43 @@ def log_gpu_stats(device_id, label=""):
 # --- Measure import time ---
 t0 = time.perf_counter()
 
+#### 7b / 8b ####
+# clean_model_path = "common-pile/comma-v0.1-2t"
+# dirty_model_path = "meta-llama/Llama-3.1-8B"
+
+# clean_model = AutoModelForCausalLM.from_pretrained(clean_model_path,torch_dtype=torch.bfloat16).to("cuda:0")
+# dirty_model = AutoModelForCausalLM.from_pretrained(dirty_model_path,torch_dtype=torch.bfloat16).to("cuda:0")
+
+#### 7b / 70b ####
 clean_model_path = "common-pile/comma-v0.1-2t"
-dirty_model_path = "meta-llama/Llama-3.1-8B"
+dirty_model_path = "meta-llama/Llama-3.1-70B"
+
+
+# bnb_config = BitsAndBytesConfig(
+#     load_in_4bit=True,
+#     bnb_4bit_compute_dtype=torch.bfloat16,
+#     bnb_4bit_use_double_quant=True,
+#     bnb_4bit_quant_type="nf4",
+# )
 
 bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_use_double_quant=True,
-    bnb_4bit_quant_type="nf4",
+    load_in_8bit=True,                # enable 8-bit loading
+    llm_int8_threshold=6.0,           # outlier threshold (default)
+    llm_int8_skip_modules=None,       # optional list of modules to skip quantization
+    llm_int8_has_fp16_weight=False,   # True if model was converted from fp16 weights
+    bnb_8bit_use_double_quant=True,   # second quantization layer for memory savings
+    bnb_8bit_quant_type="nf8",        # quantization type: "fp8", "nf4", or "nf8" (nf8 is good default)
 )
 
+clean_model = AutoModelForCausalLM.from_pretrained(clean_model_path,torch_dtype=torch.bfloat16).to("cuda:0")
+dirty_model = AutoModelForCausalLM.from_pretrained(dirty_model_path,torch_dtype=torch.bfloat16, quantization_config=bnb_config, low_cpu_mem_usage=True, device_map="cuda:0")
 
-clean_model = AutoModelForCausalLM.from_pretrained(clean_model_path,torch_dtype=torch.bfloat16,quantization_config=bnb_config, device_map={"":0})
-clean_model.config.use_cache=False
-dirty_model = AutoModelForCausalLM.from_pretrained(dirty_model_path,torch_dtype=torch.bfloat16,quantization_config=bnb_config, device_map={"":1})
-dirty_model.config.use_cache=False
+
+
+# clean_model = AutoModelForCausalLM.from_pretrained(clean_model_path,torch_dtype=torch.bfloat16,quantization_config=bnb_config, device_map={"":0})
+# dirty_model = AutoModelForCausalLM.from_pretrained(dirty_model_path,torch_dtype=torch.bfloat16,quantization_config=bnb_config, device_map={"":1})
+
+
 
 clean_tokenizer = AutoTokenizer.from_pretrained(clean_model_path)
 dirty_tokenizer = AutoTokenizer.from_pretrained(dirty_model_path)
@@ -59,7 +81,7 @@ outputs = generate_batched(
     BytewiseKLAcpFuseFactory(tcs_clean=clean_bc, tcs_dirty=dirty_bc, k_radius=0.1),
     prompts,
     temperature=0.7,
-    max_new_bytes=600,
+    max_new_bytes=800,
     display=False
 )
 print(outputs)
