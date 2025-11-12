@@ -95,7 +95,8 @@ class BytewiseKLAcpFuse:
         clean_logits = clean_logits.to(fuse_device)
         dirty_logits = dirty_logits.to(fuse_device)
         # clean_logits, dirty_logits sometimes -inf to mask out invalid continuations to the prefix? 
-        bc, _, _ = solve_optimization_batched(clean_logits, dirty_logits, self.k_radius)
+        # bc, _, _ = solve_optimization_batched(clean_logits, dirty_logits, self.k_radius)
+        bc, bd = solve_optimization(clean_logits, dirty_logits, self.k_radius)
         fused_log_probs = interpolate(clean_logits, dirty_logits, bc)
         return fused_log_probs
         
@@ -294,7 +295,7 @@ class BytewiseProxyTuning:
             logprobs[:, 0, :] + (logprobs[:, 1, :] - logprobs[:, 2, :]) * self.alpha, 1
         )
 
-
+@torch.inference_mode()
 def generate_batched(
     sampler_factory,
     prompts: list[str],
