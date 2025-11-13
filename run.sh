@@ -6,4 +6,5 @@ uv run python -m generate_cd \
     --mode "local_kl_acp_fuse" \
     --clean_model_path jacquelinehe/comma-1.7b-v5 \
     --dirty_model_path meta-llama/Meta-Llama-3.1-8B \
-    --output_file /gscratch/scrubbed/jyyh/bs/results.jsonl
+    --output_file /gscratch/scrubbed/jyyh/bs/results.jsonl \
+    --batch_size 4 
