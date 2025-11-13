@@ -74,21 +74,14 @@ class BytewiseKLAcpFuse:
         self.kwargs = kwargs
         self.bs_clean = tcs_clean.get_bytewise_sampler(batch_size=batch_size)
         self.bs_dirty = tcs_dirty.get_bytewise_sampler(batch_size=batch_size)
-        print(self.tcs_clean.model.device)
-        print(self.tcs_dirty.model.device)
 
         self.bss = [self.bs_clean, self.bs_dirty]
         self.kwargs = kwargs 
 
     def get_dists(self, **kwargs):
-        # logits = torch.stack([bs.get_dists(**kwargs) for bs in self.bss], 0).moveaxis(
-        #     1, 0
-        # )
-        # clean_logits, dirty_logits = logits[:, 0, :], logits[:, 1, :] # 1, 257 (byte-level)
-
         clean_logits = self.bs_clean.get_dists(**kwargs)
         dirty_logits = self.bs_dirty.get_dists(**kwargs)
-        print(dirty_logits.shape)
+
         if clean_logits.dim() == 3:
             clean_logits = clean_logits[:, -1, :]   # [B, V]
             dirty_logits = dirty_logits[:, -1, :]   # [B, V]
@@ -99,13 +92,11 @@ class BytewiseKLAcpFuse:
         fuse_device = dirty_logits.device 
         clean_logits = clean_logits.to(fuse_device)
         dirty_logits = dirty_logits.to(fuse_device)
-        print(dirty_logits.shape)
+
         # clean_logits, dirty_logits sometimes -inf to mask out invalid continuations to the prefix? 
         bc, bd = solve_optimization(clean_logits, dirty_logits, self.k_radius)
-        print(bc.shape)
-        print(bd.shape)
+
         fused_log_probs = interpolate(clean_logits, dirty_logits, bc)
-        print(fused_log_probs.shape)
         return fused_log_probs
         
 
