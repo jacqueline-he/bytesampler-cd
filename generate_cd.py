@@ -162,7 +162,7 @@ def build_bc_factory(args, device: torch.device):
             )
              # for 70B, let HF shard across GPUs automatically if you have multiple
             if device.type == "cuda":
-                device_map = "auto"
+                device_map = "cuda:0" # fix to 1 
             else:
                 # 8-bit on CPU is pointless, but keep it technically valid
                 device_map = {"": "cpu"}
