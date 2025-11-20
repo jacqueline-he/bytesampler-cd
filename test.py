@@ -78,7 +78,6 @@ prompts = ["hello, how are you doing?", "goodbye, have a nice day!"]
 outputs = generate_batched(
     BytewiseKLAcpFuseFactory(tcs_clean=clean_bc, tcs_dirty=dirty_bc, k_radius=0.1),
     prompts,
-    temperature=0.7,
     max_new_bytes=800,
     display=False
 )
@@ -110,27 +109,6 @@ outputs = generate_batched(
     display=False
 )
 print(outputs)
-
-# Test with different alpha/beta combinations
-print("\n" + "-"*30)
-print("Copyright decoding with alpha=0.8")
-print("-"*30)
-generate_batched(
-    BytewiseCopyrightDecodingFactory(tcs_draft=clean_bc, tcs_verify=dirty_bc, alpha=0.8),
-    prompts,
-    max_new_bytes=500,
-    display=True
-)
-
-print("\n" + "-"*30)
-print("Copyright decoding with alpha=1.2")
-print("-"*30)
-generate_batched(
-    BytewiseCopyrightDecodingFactory(tcs_draft=clean_bc, tcs_verify=dirty_bc, alpha=1.2),
-    prompts,
-    max_new_bytes=500,
-    display=True
-)
 
 t1 = time.perf_counter()
 print(f"Sampling took {t1 - t0:.2f} seconds")

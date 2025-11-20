@@ -76,8 +76,6 @@ class BytewiseKLAcpFuse:
         self.kwargs = kwargs
         self.bs_clean = tcs_clean.get_bytewise_sampler(batch_size=batch_size)
         self.bs_dirty = tcs_dirty.get_bytewise_sampler(batch_size=batch_size)
-        print(self.tcs_clean.model.device)
-        print(self.tcs_dirty.model.device)
 
         self.bss = [self.bs_clean, self.bs_dirty]
         self.kwargs = kwargs 
@@ -115,6 +113,7 @@ class BytewiseCPFuseFactory:
     def get_bytewise_sampler(self, batch_size):
         return BytewiseCPFuse(batch_size, *self.args, **self.kwargs)
 
+# @TODO(jyyh): unfinished...
 class BytewiseCPFuse:
     def __init__(self, batch_size, tcs_clean, tcs_dirty, **kwargs):
         self.batch_size = batch_size
@@ -124,8 +123,6 @@ class BytewiseCPFuse:
         self.bs_clean = tcs_clean.get_bytewise_sampler(batch_size=batch_size)
         self.bs_dirty = tcs_dirty.get_bytewise_sampler(batch_size=batch_size)
         self.grid_size = 10
-        print(self.tcs_clean.model.device)
-        print(self.tcs_dirty.model.device)
 
         self.bss = [self.bs_clean, self.bs_dirty]
         self.kwargs = kwargs 
