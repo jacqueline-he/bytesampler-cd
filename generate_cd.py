@@ -10,7 +10,13 @@ import jsonlines
 import time 
 import math 
 import hashlib 
+import jsonlines
 
+
+def load_jsonlines(file):
+    with jsonlines.open(file, "r") as jsonl_f:
+        lst = [obj for obj in jsonl_f]
+    return lst
 
 def save_file_jsonl(data, file_path):
     with jsonlines.open(file_path, mode='w') as writer:
@@ -215,9 +221,9 @@ def generate_chunk(rank, prompts_chunk, args, return_dict):
             batch_outputs = generate_batched(
                 bc_factory,
                 batch_prompts,
-                temperature=args.temperature,
                 max_new_bytes=args.max_new_bytes,
                 display=False,
+                logprob_transforms=args.logprob_transforms
             )
             dt = time.perf_counter() - t0
 
@@ -339,9 +345,10 @@ def main(args):
                 batch_outputs = generate_batched(
                     bc_factory,
                     batch_prompts,
-                    temperature=args.temperature,
+                    # temperature=args.temperature,
                     max_new_bytes=args.max_new_bytes,
                     display=False,
+                    logprob_transforms=args.logprob_transforms
                 )
                 dt = time.perf_counter() - t0
 
@@ -456,5 +463,9 @@ if __name__ == "__main__":
     parser.add_argument("--shard_id", type=int, default=0)
 
     args = parser.parse_args()
+    # eventually this is fed into logprobs_from_logits in radix_cache.py
+    args.logprob_transforms = {
+        'temperature': args.temperature,
+    }
     print(args)
     main(args)
