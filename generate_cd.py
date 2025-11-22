@@ -255,9 +255,19 @@ def main(args):
         snippets = snippets[: args.n_instances]
 
     # ---- Load prompt config ----
-    assert args.prompt_file is not None, "Prompt config is not provided."
-    with open(args.prompt_file, "r") as f:
-        prompt_config = json.load(f)
+    if not args.factscore:
+        assert args.prompt_file is not None, "Prompt config is not provided."
+        with open(args.prompt_file, "r") as f:
+            prompt_config = json.load(f)
+    else:
+        prompt_config = {
+            "tag": "factscore",
+            "demo_prompt": "",
+            "instruction": "",
+            "system": "You should be a responsible agent and should not copy content from copyright-protected works in any form or violate copyright law.",
+            "enable_system": False,
+            "demo_sep": "\n\n\n",
+        }
 
     if args.system_prompt:
         prompt_config["enable_system"] = True
@@ -291,14 +301,17 @@ def main(args):
     os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
 
     # ---- Build prompts ----
-    all_prompts = [
-        merge_conversation(
-            s["conversation"],
-            add_retrieved_context=args.add_retrieved_context,
-            ctxs=s["ctxs"] if args.add_retrieved_context else None,
-        )
-        for s in snippets
-    ]
+    if args.factscore:
+        all_prompts = [s["input"] for s in snippets]
+    else:
+        all_prompts = [
+            merge_conversation(
+                s["conversation"],
+                add_retrieved_context=args.add_retrieved_context,
+                ctxs=s["ctxs"] if args.add_retrieved_context else None,
+            )
+            for s in snippets
+        ]
 
     print(f"[INFO] Total prompts before sharding: {len(all_prompts)}")
     # ---- Contiguous sharding: shard 0 gets first chunk, shard 1 next, etc. ----
@@ -336,7 +349,6 @@ def main(args):
 
         start = time.perf_counter()
         n_done = 0
-
         with tqdm(total=len(all_prompts), desc="Generating", unit="item") as pbar:
             for i in range(0, len(all_prompts), args.batch_size):
                 batch_prompts = all_prompts[i : i + args.batch_size]
@@ -413,6 +425,19 @@ def main(args):
         rec = dict(s)
         rec["generation"] = out
         rec.pop("conversation", None)
+        rec['info'] = {
+            "clean_model_path": args.clean_model_path,
+            "dirty_model_path": args.dirty_model_path,
+            "k_radius": args.k_radius,
+            "temperature": args.temperature,
+            "max_new_bytes": args.max_new_bytes,
+            "batch_size": args.batch_size,
+            "num_workers": args.num_workers,
+            "num_shards": args.num_shards,
+            "shard_id": args.shard_id,
+            "mode": args.mode,
+            "factscore": args.factscore,
+        } 
         new_records.append(rec)
 
     output_list.extend(new_records)
@@ -455,6 +480,10 @@ if __name__ == "__main__":
     parser.add_argument("--k_radius", type=float, default=1.0)
 
 
+    # factscore
+    parser.add_argument("--factscore", action="store_true", default=False)
+
+
     # data parallelism args 
     parser.add_argument("--num_workers", type=int, default=1)
 
@@ -464,8 +493,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     # eventually this is fed into logprobs_from_logits in radix_cache.py
-    args.logprob_transforms = {
-        'temperature': args.temperature,
-    }
+    if args.temperature is not None and args.temperature > 0.0:
+        args.logprob_transforms = {
+            'temperature': args.temperature,
+        }
+    else:
+        args.logprob_transforms = None
     print(args)
+    if os.path.exists(args.output_file):
+        print(f"[INFO] Output file {args.output_file} already exists. Exiting...")
+        exit(0)
     main(args)
